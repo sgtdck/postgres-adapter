@@ -1,9 +1,10 @@
 require('jugglingdb/test/common.batch.js');
 require('jugglingdb/test/include.test.js');
-
+var Schema = require('jugglingdb').Schema;
 var assert = require('assert');
 var schema = getSchema();
 var Post;
+var Article;
 
 it('should not generate malformed SQL for number columns set to empty string', function (done) {
     Post = schema.define('posts', {
@@ -141,3 +142,30 @@ it('all should support \'or\' operator', function (done) {
         });
     });
 });
+
+it('should support \'jsonb\' dataType for type \'JSON\'', function (done) {
+    Article = schema.define('articles', {
+        title: { type: String }
+        , userId: { type: Number }
+        , body: { type: Schema.JSON, dataType: 'jsonb'}
+    });
+    schema.autoupdate(function () {
+        Article.destroyAll(function () {
+            Article.create([
+                {title:'Article 1', userId:'', body: '{"article":{"tags":["foo","bar","baz"]}}'}
+                , {title:'Article 2', userId:'', body: '{"article":{"tags":["bar","baz"]}}'}
+                , {title:'Article 3', userId:'', body: '{"article":{"tags":["baz"]}}'}
+            ], function (err, articles) {
+                var article1 = articles[0];
+
+                Article.all({where:{arbitrary:"(body#>>'{article,tags}')::jsonb ?& array['foo']"}}, function (err, articles) {
+                    assert.ok(!err);
+                    assert.ok(article1.id == articles[0].id);
+                    assert.equal(articles.length, 1, "only one article matches");
+                    done();
+                });
+            });
+        });
+    });
+});
+
